@@ -1,0 +1,897 @@
+#!/bin/bash
+
+#==============================
+#dbout:
+#	example:
+#		dbout $output_level $output_port "message"
+#		dbout 0 0 "test"
+#	$output_level :  output if value less/equal $debuglevel
+#
+#	$output_port :  0=> output to $debugport port
+#					1=> output to $debugtty port
+#					2=> output to file
+#
+#==============================
+dbout(){
+	case "$1" in
+	0)
+		if [ $level0 = "enable" ];then
+			show_message $1 "$2"
+		fi
+		;;
+	1)
+		if [ $level1 = "enable" ];then
+			show_message $1 "$2"
+		fi
+		;;
+	2)
+		if [ $level2 = "enable" ];then
+			show_message $1 "$2"
+		fi
+		;;
+	3)
+		if [ $level3 = "enable" ];then
+			show_message $1 "$2"
+		fi
+		;;
+	4)
+		if [ $level4 = "enable" ];then
+			show_message $1 "$2"
+		fi
+		;;
+	5)
+		if [ $level5 = "enable" ];then
+			show_message $1 "$2"
+		fi
+		;;
+	6)
+		if [ $level6 = "enable" ];then
+			show_message $1 "$2"
+		fi
+		;;
+	7)
+		if [ $level7 = "enable" ];then
+			show_message $1 "$2"
+		fi
+		;;
+	esac
+}
+
+show_message(){
+	if [ $debugport ];then
+		echo "[message_level : $1 ] : $2" >> ${debugport}
+	elif [ $debugtty ];then
+		echo "[message_level : $1 ] : $2" >> ${debugtty}
+	else
+		echo "[message_level : $1 ] : $2" >> $CURDIR/$model
+	fi
+}
+
+#==============================
+#func_POWERONCON:
+#		func_POWERONCON $arg
+#	$arg :  clean=> remove $poweron_count file
+#			read => read $poweron_count file
+#			startup => count+1,set alarm clock to mcu then power off
+#
+#	example:
+#		./HW_tools runintest clean
+#		./HW_tools runintest read
+#		./HW_tools runintest startup
+#
+#==============================
+func_POWERONCON() {
+	case "$1" in
+	clean)
+		if [ -f $CURDIR/$poweron_count ]; then
+			rm $CURDIR/$poweron_count
+		fi
+		;;
+	read)
+		if [ -f $CURDIR/$poweron_count ]; then
+			dbout 4 `cat $CURDIR/$poweron_count`
+		fi
+		;;
+	startup)
+		$CURDIR/$mp_fun "--startup" $CURDIR/$poweron_count
+		sync
+		if [ $startup_times -gt `cat $CURDIR/$poweron_count | awk '{print $2}'` ]; then
+#數值的處理要注意是用二次小括號(( ...... )) it support +, -, *, /, %
+			for ((i=1; i<=$poweroff_time; i++))
+			do
+				sleep 1
+				dbout 5 "power off count : $i"
+			done
+			$CURDIR/$efm_fun "--setalarm" $mcu_dev $alarm_time
+			poweroff
+		fi
+		;;
+	*)
+		dbout 2 "This arg($2) have not support!!!"
+		;;
+	esac
+	
+	result=$(echo $?)
+
+	if [ $result -eq 0 ]; then
+		dbout 7 "func_POWERONCON Test $result"
+	elif [ $result -ge 128 ]; then
+		dbout 7 "func_POWERONCON Test = Fail"
+	else
+		dbout 3 "$0 function need to modify!"
+	fi
+
+}
+
+#==============================
+#func_DISPLSY:
+#		func_DISPLSY $device $second
+#		
+#	example:
+#	./HW_tools display /dev/fb0
+#
+#==============================
+func_DISPLSY() {
+
+	device=${1##*/}
+	echo 0 > /sys/class/graphics/$device/blank
+	
+	$CURDIR/$mp_fun "--display" $1 5
+	result=$(echo $?)
+#	echo 1 > /sys/class/graphics/$device/blank
+	
+	if [ $result -eq 0 ]; then
+		dbout 7 "DISPLSY Test $1 = Pass"
+	elif [ $result -ge 128 ]; then
+		dbout 7 "DISPLSY Test $1 = Fail"
+	else
+		dbout 3 "$0 function need to modify!"
+	fi
+}
+
+#==============================
+#func_AUDIO:
+#		func_AUDIO $device $second
+#
+#	example:
+#	./HW_tools audio spk
+#	./HW_tools audio hp
+#	./HW_tools audio linein
+#	./HW_tools audio mic
+#
+#==============================
+func_AUDIO() {
+
+	case "$1" in
+	spk)
+		dbout 5 "play $CURDIR/$wav_spk by $1 start!!!"
+		aplay $CURDIR/$wav_spk
+		;;
+	hp)
+		dbout 5 "play $CURDIR/$wav_hp by $1 start!!!"
+		aplay $CURDIR/$wav_hp
+		;;
+	linein)
+		dbout 3 "record 10 second source from $1 start!!!"
+		arecord -t wav -f cd -d 10 $CURDIR/$wav_linein
+		dbout 3 "play $CURDIR/$wav_lineout by $1 start!!!"
+		aplay $CURDIR/$wav_lineout
+		rm $CURDIR/$wav_lineout
+		;;
+	mic)
+		dbout 3 "record 10 second source from $1 start!!!"
+		arecord -t wav -f cd -d 10 $CURDIR/$wav_mic
+		dbout 3 "play $CURDIR/$wav_mic by $1 start!!!"
+		aplay $CURDIR/$wav_mic
+		rm $CURDIR/$wav_mic
+		;;
+	*)
+		dbout 2 "This arg($2) have not support!!!"
+		;;
+	esac
+
+#	read -p "Please Enter it pass(p) or fail(f):" -t 30 audio
+	read -p "Please Enter it pass(p) or fail(f):" audio
+	if [ $audio = "p" ]; then
+		dbout 7 "AUDIO Test $1 = Pass"
+	elif [ $audio = "f" ]; then
+		dbout 7 "AUDIO Test $1 = Fail"
+	else
+		dbout 0 "Enter is not 'p' or 'f' !"
+		func_AUDIO
+	fi
+}
+
+#==============================
+#func_GPIO:
+#	func_GPIO $direction $number
+#	$direction :  gpio pin direction
+#
+#	$number :  gpio pin number is (32*group + pin_number - 1)
+#			   1=> GPIO1_1 it mean pin number 1 at group 0
+#			   51=> GPIO2_20 it mean pin number 20 at group 2
+#			   101=> GPIO3_6 it mean pin number 6 at group 3
+#
+#	example:
+#	./HW_tools gpio in
+#	./HW_tools gpio out
+#	./HW_tools gpio pair
+#
+#==============================
+func_GPIO() {
+	case "$1" in
+	in)
+		$CURDIR/$mp_fun "--gpio" $1 $gpio_in
+		result=$(echo $?)
+		;;
+	out)
+		$CURDIR/$mp_fun "--gpio" $1 $gpio_out
+		result=$(echo $?)
+		;;
+	pair)
+		$CURDIR/$mp_fun "--gpio" $1 $gpio_pair
+		result=$(echo $?)
+		;;
+	*)
+		dbout 2 "This arg($2) have not support!!!"
+		;;
+	esac
+	
+	if [ $result -eq 0 ]; then
+		dbout 7 "GPIO Test $1 = Pass"
+	elif [ $result -ge 128 ]; then
+		dbout 7 "GPIO Test $1 = Fail"
+	else
+		dbout 3 "$0 function need to modify!"
+	fi
+		
+}
+
+func_LEDExport() {
+	for i in $1
+	do
+		if [ ! -d /sys/class/gpio/gpio$i ]; then
+			echo $i > /sys/class/gpio/export
+		fi
+	done
+}
+
+func_LEDUnexport() {
+	for i in $1
+	do
+		if [ -d /sys/class/gpio/gpio$i ]; then
+			echo $i > /sys/class/gpio/unexport
+		fi
+	done
+}
+
+#==============================
+#func_RS232:
+#	func_RS232 $argv $port
+#
+#	example:
+#	./HW_tools rs232 server
+#	./HW_tools rs232 client
+#	./HW_tools rs232 repeat
+#
+#==============================
+func_RS232() {
+			rs232=-1
+			rs232times=1
+			while [ ! $rs232 = 0 ] && [ ! $rs232times = $rs232maxtimes ]; do
+				if [ -f $CURDIR/$mp_fun ]; then
+					case $1 in
+					server)
+					$CURDIR/$mp_fun "--rs232" $1 $rs232_server
+					rs232=$(echo $?)
+					;;
+					client)
+					$CURDIR/$mp_fun "--rs232" $1 $rs232_client
+					rs232=$(echo $?)
+					;;
+					repeat)
+					$CURDIR/$mp_fun "--rs232" $1 $rs232_repeat
+					rs232=$(echo $?)
+					;;
+					*)
+					dbout 2 "func_RS232 not support $1 function name"
+					;;
+					esac
+				fi
+				sleep $rs232times
+				rs232times=$(expr $rs232times + 1)
+			done
+
+			if [ $rs232 = 0 ]; then
+				dbout 7 "Test RS232 $1 Pass"
+			else
+				dbout 7 "Test RS232 $1 Fail"
+			fi
+}
+
+#==============================
+#func_RS485:
+#	func_RS485 $argv $port
+#
+#	example:
+#	./HW_tools rs485 server
+#	./HW_tools rs485 client
+#
+#==============================
+func_RS485() {
+			rs485=-1
+			rs485times=1
+			while [ ! $rs485 = 0 ] && [ ! $rs485times = $rs485maxtimes ]; do
+				if [ -f $CURDIR/$mp_fun ]; then
+					case $1 in
+					server)
+					$CURDIR/$mp_fun "--rs485" $1 $rs485_server
+					rs485=$(echo $?)
+					;;
+					client)
+					$CURDIR/$mp_fun "--rs485" $1 $rs485_client
+					rs485=$(echo $?)
+					;;
+					*)
+					dbout 2 "func_RS485 not support $1 function name"
+					;;
+					esac
+				fi
+				sleep $rs485times
+				rs485times=$(expr $rs485times + 1)
+			done
+	
+			if [ $rs232 = 0 ]; then
+				dbout 7 "Test RS485 $1 Pass"
+			else
+				dbout 7 "Test RS485 $1 Fail"
+			fi
+
+}
+
+#==============================
+#func_USB:
+#	func_USB
+#
+#	example:
+#	./HW_tools usb storage
+#
+#==============================
+func_USB() {
+#		umount /mnt
+#		mount /dev/sda1 /mnt
+		usbtest="NA"
+		case $1 in 
+		storage)
+			for i in $usbdev
+			do
+			USBPWD=$(cat /proc/mounts | grep /dev/$i | awk '{print $3}')
+			if [ $(cat /proc/mounts | grep /dev/$i | awk '{print $3}' | wc -l) = 1 ]; then
+				if [ ! -d $USBPWD/$usbfold ]; then
+					mkdir -p $USBPWD/$usbfold
+				fi
+				echo "usb $1 test" > $USBPWD/$usbpath
+				sync
+				if [ -f $USBPWD/$usbpath ]; then
+					usbtest="Pass"
+					rm $USBPWD/$usbpath
+					sync
+					if [ -f $USBPWD/$usbpath ]; then
+						usbtest="Fail"
+						dbout 2 "func_USB storage $i con't delete!"
+					fi
+				else
+					usbtest="Fail"
+					dbout 2 "func_USB storage $i con't save!"
+				fi
+			fi
+			done
+
+			if [ $usbtest = "Pass" ]; then
+				dbout 7 "func_USB $1 Pass!"
+			elif [ $usbtest = "NA" ]; then
+				dbout 7 "func_USB $1 don't do it!"
+			else
+				dbout 7 "func_USB $1 Fail!"
+			fi
+			;;
+		*)
+		dbout 2 "This arg($2) have not support!!!"
+			;;
+		esac
+}
+
+#==============================
+#func_SDCARD:
+#	func_SDCARD
+#
+#	example:
+#	./HW_tools sdcard storage
+#
+#==============================
+func_SDCARD() {
+		sdcard="NA"
+		case $1 in 
+		storage)
+			for i in $sddev
+			do
+			SDPWD=$(cat /proc/mounts | grep /dev/$i | awk '{print $3}')
+			if [ $(cat /proc/mounts | grep /dev/$i | awk '{print $3}' | wc -l) = 1 ]; then
+				if [ ! -d $SDPWD/$sdfold ]; then
+					mkdir -p $SDPWD/$sdfold
+				fi
+				echo "sdcard $1 test" > $SDPWD/$sdpath
+				sync
+				if [ -f $SDPWD/$sdpath ]; then
+					sdcard="Pass"
+					rm $SDPWD/$sdpath
+					sync
+					if [ -f $SDPWD/$sdpath ]; then
+						sdcard="Fail"
+						dbout 2 "func_SDCARD storage $i con't delete!"
+					fi
+				else
+					sdcard="Fail"
+					dbout 2 "func_SDCARD storage $i con't save!"
+				fi
+			fi
+			done
+
+			if [ $sdcard = "Pass" ]; then
+				dbout 7 "func_SDCARD $1 Pass!"
+			elif [ $sdcard = "NA" ]; then
+				dbout 7 "func_SDCARD $1 don't do it!"
+			else
+				dbout 7 "func_SDCARD $1 Fail!"
+			fi
+			;;
+		*)
+		dbout 2 "This arg($2) have not support!!!"
+			;;
+		esac
+}
+
+#==============================
+#func_ETHERNET:
+#	func_ETHERNET $port
+#
+#	example:
+#	./HW_tools ethernet eth0
+#	./HW_tools ethernet eth1
+#
+#==============================
+func_ETHERNET() {
+		eth="NA"
+		case $1 in 
+		eth0 | eth1)
+			if [ -f $CURDIR/$eth_load ]; then 
+				rm $CURDIR/$eth_load
+			fi
+			if [ -f $CURDIR/$eth_save ]; then 
+				rm $CURDIR/$eth_save
+			fi
+			sync
+			
+			ethtimes=1
+			while [ ! $eth = "Pass" ] && [ ! $ethtimes = $ethmaxtimes ]; do
+				udhcpc -i $1 &
+				sleep 2
+				if [ $(ifconfig $1 | grep inet | wc -l) = 0 ]; then
+					sleep 3
+				fi
+	
+				if [ $ping_address ]; then
+					result=`ping -I $1 -c 2 -w 3 $ping_address`
+					echo "$result"
+					if [ $(echo "$result" | grep "round-trip min/avg/max" | wc -l) = 1 ]; then
+						eth="Pass"
+					elif [ $(echo "$result" | grep "bad address" | wc -l) = 1 ]; then
+						eth="Fail"
+					else
+						eth="Fail"
+					fi
+				else
+					echo "eternet device $1 test" > $CURDIR/$eth_save
+					sync
+					ftpput -u $ftpid -p $ftppw $ftpserver $eth_save $eth_save
+					sleep 1
+					ftpget -u $ftpid -p $ftppw $ftpserver $eth_load $eth_save
+					if [ -f $CURDIR/$eth_load ]; then
+						eth="Pass"
+						rm $CURDIR/$eth_load
+						sync
+					else
+						eth="Fail"
+					fi
+				fi
+				
+				killall udhcpc
+				ifconfig $1 down
+
+				ethtimes=$(expr $ethtimes + 1)
+			done
+		
+			if [ $eth = "Pass" ]; then
+				dbout 7 "func_ETHERNET $1 Pass!"
+			elif [ $eth = "NA" ]; then
+				dbout 7 "func_ETHERNET $1 don't do it!"
+			else
+				dbout 7 "func_ETHERNET $1 Fail!"
+			fi
+			;;
+		*)
+		dbout 2 "This arg($2) have not support!!!"
+			;;
+		esac
+}
+
+#==============================
+#func_WIFI:
+#	func_WIFI $port
+#
+#	example:
+#	./HW_tools wifi wlan0
+#
+#==============================
+func_WIFI() {
+	wifi_ret="NA"
+	case "$type" in
+		TYPE-A-101 | TYPE-C-103)
+			dbout 7 "$type does not support WIFI device"
+			;;
+		*)
+			if [ -f ./$wifi_load ]; then 
+				rm ./$wifi_load
+			fi
+			sync
+		
+			if [ $wifi_module ]; then
+				insmod $wifi_module
+				sleep 1
+				ifconfig $1 up
+				sleep 1
+			fi
+
+			timeswifi=1
+			while [ ! $wifi_ret = "Pass" ] && [ ! $timeswifi = $wifimaxtimes ]; do
+				/usr/sbin/wpa_supplicant -i$1 -c/etc/wpa_supplicant/wpa_supplicant.conf &
+				sleep 3
+
+				if [ $security = "wpa" ]; then
+					networkid=$(wpa_cli -i$1 -p/var/run/wpa_supplicant add_network)
+					checkid=$(wpa_cli -i$1 -p/var/run/wpa_supplicant set_network $networkid ssid \"$wpassid\")
+					checkpw=$(wpa_cli -i$1 -p/var/run/wpa_supplicant set_network $networkid psk \"$wpapw\")
+					checken=$(wpa_cli -i$1 -p/var/run/wpa_supplicant enable_network $networkid)
+				fi
+				if [ $security = "wep" ]; then
+					networkid=$(wpa_cli -i$1 -p/var/run/wpa_supplicant add_network)
+					checkid=$(wpa_cli -i$1 -p/var/run/wpa_supplicant set_network $networkid ssid \"$wepssid\")
+					checkid=$(wpa_cli -i$1 -p/var/run/wpa_supplicant set_network $networkid key_mgmt NONE)
+					checkpw=$(wpa_cli -i$1 -p/var/run/wpa_supplicant set_network $networkid wep_key0 \"$weppw\")
+					checken=$(wpa_cli -i$1 -p/var/run/wpa_supplicant enable_network $networkid)
+				fi
+
+				udhcpc -i $1 &
+	
+				wifitimes=0
+				while [ ! $(ifconfig $1 | grep "inet addr" | wc -l ) = 1 ] && [ ! $wifitimes = $maxwifitimes ]; do
+					sleep 1
+					wifitimes=$(expr $wifitimes + 1)
+				done
+				sleep 5
+				
+				if [ $ping_address ]; then
+					result=`ping -I $1 -c 2 -w 3 $ping_address`
+					echo "$result"
+					if [ $(echo "$result" | grep "round-trip min/avg/max" | wc -l) = 1 ]; then
+						wifi_ret="Pass"
+					elif [ $(echo "$result" | grep "bad address" | wc -l) = 1 ]; then
+						wifi_ret="Fail"
+					else
+						wifi_ret="Fail"
+					fi				
+				else
+					echo "wifi device $1 test" > $CURDIR/$wifi_save
+					sync
+					ftpput -u $ftpid -p $ftppw $ftpserver $wifi_save $wifi_save
+					sleep 1
+					ftpget -u $ftpid -p $ftppw $ftpserver $wifi_load $wifi_save
+					if [ -f $CURDIR/$wifi_load ]; then
+						wifi_ret="Pass"
+						rm $CURDIR/$wifi_load
+						sync
+					else
+						wifi_ret="Fail"
+					fi
+				fi
+				
+				killall udhcpc	
+				killall wpa_supplicant
+				ifconfig $1 down
+				timeswifi=$(expr $timeswifi + 1)
+			done
+	
+			if [ $wifi_module ]; then
+				rmmod $wifi_module_name
+			fi
+			
+			if [ $wifi_ret = "Pass" ]; then
+				dbout 7 "func_WIFI $1 Pass!"
+			elif [ $wifi_ret = "NA" ]; then
+				dbout 7 "func_WIFI $1 don't do it!"
+			else
+				dbout 7 "func_WIFI $1 Fail!"
+			fi
+			;;
+	esac
+}
+
+#==============================
+#func_3G:
+#	func_3G $port
+#
+#	example:
+#	./HW_tools 3g wvdial.conf
+#
+#==============================
+func_3G() {
+	case "$type" in
+		TYPE-A-101 | TYPE-B-102)
+			if [ -f ./TEST_3G ]; then 
+				rm ./TEST_3G
+			fi
+			sync
+
+			gggtimes=1
+			while [ ! -f ./TEST_3G ] && [ ! $gggtimes = $gggmaxtimes ]; do
+				wvdial -C $CURDIR/$1 PinDEFAULT
+				wvdial -C $CURDIR/$1 DEFAULT &
+				sleep $gggsleeptime
+
+				wget http://$gggid:$gggpw@$gggfile
+
+				killall wvdial
+				gggtimes=$(expr $gggtimes + 1)
+			done
+		
+			ggg=$(cat ./TEST_3G)
+			rm ./TEST_3G
+			sync
+
+			if [ $ggg = WIFI_TEST ]; then
+				dbout 7 "func_3G $1 Pass!"
+			else
+				dbout 7 "func_3G $1 Fail!"
+			fi
+			;;
+		*)
+			dbout 7 "$type does not support 3G device"
+			;;
+	esac
+}
+
+#==============================
+#func_DDR:
+#	func_DDR $enable
+#	func_DDR yes => only do one times
+#	func_DDR retry => every one do it if reboot
+#
+#	example:
+#	./HW_tools ddr yes
+#	./HW_tools ddr retry
+#
+#==============================
+func_DDR() {
+case "$type" in
+	*)
+		if [ $1 = "yes" ]; then
+			if [ $(rtx_setenv -l | grep "Mem_Test = Pass" | wc -l) = 1 ]; then
+				dbout 7 "func_DDR $1 Pass!"
+			else	
+				if [ $(rtx_setenv -l | grep "Mem_Test = Fail" | wc -l) = 1 ]; then
+					dbout 7 "func_DDR $1 Fail!"
+				else
+					/usr/bin/rtx_setenv --set Mem_Test=Redo
+					dbout 7 "func_DDR $1 Redo!"
+				fi
+			fi
+		fi
+
+		if [ $1 = "retry" ]; then
+			/usr/bin/rtx_setenv --set Mem_Test=Redo
+			dbout 7 "func_DDR $1 Redo!"
+		fi
+		;;
+esac
+} 
+
+#==============================
+#func_GPS:
+#	func_GPS $enable
+#
+#	example:
+#	./HW_tools gps yes
+#
+#==============================
+func_GPS() {
+case "$type" in
+	TYPE-A-101 | TYPE-B-102)
+		if [ $1 = "yes" ]; then
+			gps=V
+			gpstimes=1
+			while [ ! $gps = A ] && [ ! $gpstimes = $gpsmaxtimes ]; do
+				gps=$(./RTX_GPS \$GPRMC $gpsscantimes)
+				gpstimes=$(expr $gpstimes + 1)
+			done
+
+			if [ $gps = A ]; then
+				dbout 7 "func_GPS $1 Pass!"
+			else
+				dbout 7 "func_GPS $1 Fail!"
+			fi
+		fi
+		;;
+	*)
+		dbout 7 "$type does not support GPS device" 
+		;;
+	esac
+}
+
+#==============================
+#func_A_MODEM:
+#	func_A_MODEM $port
+#	func_A_MODEM /dev/ttymxc4
+#
+#	example:
+#	./HW_tools modem /dev/ttymxc4
+#
+#==============================
+func_A_MODEM() {
+	case "$type" in
+		AEG-200 | TYPE-A-101 | TYPE-B-102)
+			dbout 7 "$type does not support A-MODEM device"
+			;;
+		TYPE-C-103 | TYPE-D-104)
+			amodem=a
+		
+			dbout 0 "[Please keyin (y) for PASS, (n) for FAIL, (a) try again]"
+			while [ $amodem = a ] ;do
+				sleep 1
+				echo "ATDT$phonenumber" > $1
+				read amodem
+				echo "ATH" > $1
+				usleep 200000
+			done
+
+			if [ $amodem = y ]; then
+				dbout 7 "func_A_MODEM $1 Pass!"
+			else
+				dbout 7 "func_A_MODEM $1 Fail!"
+			fi
+			;;
+	esac
+}
+
+#==============================
+#func_BT:
+#	func_BT $enable
+#	func_BT yes
+#
+#	example:
+#	./HW_tools bt yes
+#
+#==============================
+func_BT() {
+case "$type" in
+	TYPE-B-102 | TYPE-D-104)
+		if [ $1 = "yes" ]; then
+			dbout 3 "start search BT device-$btcheckmac......" 
+			bt=$(hcitool scan | grep "$btcheckmac" | awk '{print $1}')
+
+			if [ "$bt" = "$btcheckmac" ]; then
+				dbout 7 "func_BT $1 Pass!"
+			else
+				dbout 7 "func_BT $1 Fail!"
+			fi
+		fi
+		;;
+	*)
+		dbout 7 "$type does not support BT device"
+		;;
+	esac
+}
+
+#==============================
+#func_ZIGBEE:
+#	func_ZIGBEE $enable
+#	func_ZIGBEE yes
+#
+#	example:
+#	./HW_tools zigbee yes
+#
+#==============================
+func_ZIGBEE() {
+case "$type" in
+	AEG-200)
+		if [ $1 = "yes" ]; then
+			zigbee=0
+			zigbeetimes=1
+			while [ ! $zigbee = 1 ] && [ ! $zigbeetimes = $zigbeemaxtimes ]; do
+				if [ -f /usr/bin/jn5148-rf-test ]; then
+					zigbee=$(/usr/bin/jn5148-rf-test $pair $dutport $guport)
+					zigbee=$(echo $zigbee | grep "PASS" | wc -l )
+				fi
+				sleep $zigbeetimes
+				zigbeetimes=$(expr $zigbeetimes + 1)
+			done
+
+			if [ $zigbee = 1 ]; then
+				dbout 7 "func_ZIGBEE $1 Pass!"
+			else
+				dbout 7 "func_ZIGBEE $1 Fail!"
+			fi
+		fi
+		;;
+	*)
+		dbout 7 "$type does not support ZIGBEE device" 
+		;;
+	esac
+}
+
+#==============================
+#func_MAC_write:
+#	func_MAC_write $enable
+#	func_MAC_write yes => only do one times
+#
+#	example:
+#	./HW_tools internalmac yes
+#
+#==============================
+func_MAC_write() {
+	for i in $ethdev
+	do
+		if [ $i = "internal" -a $1 = "yes" ]; then
+			sed -i "s/internalmac=yes/#internalmac=no/g" $CURDIR/item_config
+			if [ $(/usr/bin/rtx_setenv -l | grep "ethaddr =" | wc -l ) = 1 ]; then
+				iethaddr=`/usr/bin/rtx_setenv -l | grep "ethaddr" | awk '{print $3}'`
+				/usr/bin/rtx_setenv --set Eth_Mac=$iethaddr
+				dbout 7 "MAC_write:$iethaddr"
+			fi
+		fi
+	done
+}
+
+#==============================
+#func_SEND_ftp:
+#	func_SEND_ftp $enable
+#
+#	example:
+#	./HW_tools sendftp yes
+#
+#==============================
+func_SEND_ftp() {
+	case "$type" in
+		*)
+			dbout 7 "$(date)"
+			if [ $1 = "yes" ]; then
+				udhcpc -i eth0 &
+				sleep 2
+				
+				ethtimes=1
+				while [ $(ifconfig eth0 |grep inet | wc -l) = 0 ] && [ ! $ethtimes = $ethmaxtimes ]; do
+					sleep 3
+					ethtimes=$(expr $ethtimes + 1)
+				done
+
+				ethline=`(ifconfig eth0 | grep HWaddr)`
+				ethaddr=${ethline##*HWaddr}
+
+				ftpget -u $ftpid -p $ftppw $ftpserver $type.log $type.log
+				echo  "$type $model eth0:$ethaddr $(cat /etc/version) $(cat /sys/devices/platform/mcu_efm.0/mcu_version) $(date '+%Y/%m/%d %X') $amodem$usb$wifi_ret$ggg$gps$eth$bt$rs232$DDR$sdcard$gpio$rs485$zigbee" >> ./$type.log
+				echo  "$type $model eth0:$ethaddr $(cat /etc/version) $(cat /sys/devices/platform/mcu_efm.0/mcu_version) $(date '+%Y/%m/%d %X') $amodem$usb$wifi_ret$ggg$gps$eth$bt$rs232$DDR$sdcard$gpio$rs485$zigbee" >> ./.$type.log
+				ftpput -u $ftpid -p $ftppw $ftpserver $model $model
+				ftpput -u $ftpid -p $ftppw $ftpserver $type.log $type.log
+			fi
+			;;
+	esac
+}

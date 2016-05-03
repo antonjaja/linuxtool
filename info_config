@@ -1,0 +1,164 @@
+####################
+#Device model name
+####################
+dev_mode=RTX
+
+####################
+#time sync web site
+####################
+ntpdaddr=time.stdtime.gov.tw
+
+####################
+#mcu check
+####################
+mcu_dev=/dev/rtc0
+mcuversion=version:130131
+
+####################
+#startup count
+####################
+poweron_count=startup_count.txt
+startup_times=10
+poweroff_time=2
+alarm_time=5
+
+####################
+#Factory Number length
+####################
+modellength=11
+defmodel=freescale
+
+####################
+#debug message output enable and port
+# level0 : input data
+# level1 : emergency
+# level2 : error
+# level3 : warring
+# level4 : debug
+# level5 : info
+# level6 : verbose
+# level7 : result
+####################
+level0=enable
+level1=enable
+level2=enable
+level3=enable
+level4=disable
+level5=disable
+level6=disable
+level7=enable
+#message 輸出prioriry為，1.debugport; 2.debugtty; 3.file;
+#若debugport沒有設定就會輸出到debugrry,若debugtty也沒有設定就會輸出到當下目錄的file,file name為Product Number.
+debugport=/dev/ttymxc1
+debugtty=/dev/tty1
+
+####################
+#retry times
+####################
+Mactimes=3
+rs232maxtimes=3
+rs485maxtimes=3
+ethmaxtimes=3
+wifimaxtimes=3
+maxwifitimes=10
+gpsmaxtimes=3
+gpsscantimes=20
+gggmaxtimes=3
+zigbeemaxtimes=3
+
+####################
+#gpio_test number
+####################
+gpio_in="148 147"
+gpio_out="148 147 146 149 165 164 161 160"
+gpio_pair="148 149"
+
+####################
+#rs232 test port
+####################
+rs232_server=/dev/ttymxc0
+rs232_client=/dev/ttymxc0
+rs232_repeat=/dev/ttymxc0
+
+####################
+#rs485 test port
+####################
+rs485_server=/dev/ttymxc4
+rs485_client=/dev/ttymxc4
+
+####################
+#usb storage
+####################
+usbdev="sda1"
+usbfold=mp
+usbpath=$usbfold/usb_test.txt
+
+####################
+#sdcard storage
+####################
+sddev="mmcblk1p1"
+sdfold=mp
+sdpath=$sdfold/sdcard_test.txt
+
+####################
+#ethernet parameter
+####################
+ping_address="8.8.8.8"
+ethdev="internal asix88772b"
+eth_save=eth_save.txt
+eth_load=eth_load.txt
+ftpserver=172.18.0.34
+ftpid=bishop
+ftppw=bishop
+ftpport=21
+
+####################
+#wifi parameter
+####################
+wifi_module_name="rt5370sta"
+wifi_module="/lib/modules/2.6.35.3/kernel/drivers/net/wireless/$wifi_module_name.ko"
+wifi_save=wifi_save.txt
+wifi_load=wifi_load.txt
+security=wep
+wpassid=1234567890-wpa
+wpapw=1234567890
+wepssid=12345-wep
+weppw=12345
+
+####################
+#3G parameter
+####################
+gggsleeptime=15
+gggid=ftp02
+gggpw=aai2518
+gggfile=ftp1.aai.com.tw/rtx/RTX/TEST_3G
+
+####################
+#modem parameter
+####################
+phonenumber=2146
+
+####################
+#bt parameter
+####################
+btcheckmac=00:02:5B:AA:AA:AA
+
+####################
+#GPS parameter
+####################
+gps_port=/dev/ttyUSB0
+
+####################
+#ZIGBEE parameter
+####################
+pair=0
+dutport=/dev/ttymxc2 
+guport=/dev/ttyUSB0
+
+####################
+#audio parameter
+####################
+wav_spk=audio8k16S.wav
+wav_hp=audio8k16S.wav
+wav_linein=audio_linein.wav
+wav_mic=audio_mic.wav

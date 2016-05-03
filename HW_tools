@@ -1,0 +1,346 @@
+#!/bin/bash
+
+DIR=$0
+CURDIR=${DIR%/*}
+cd $CURDIR
+
+mp_fun="mp"
+efm_fun="efm32fn"
+. $CURDIR/info_config
+. $CURDIR/HW_Function
+item_list=`cat ${CURDIR}/item_config | awk '{print $1}'`
+model=$defmodel
+
+#pre-do for every item
+func_item_predo() {
+if [ $(echo $1 | grep "#" | wc -l) = 0 ]; then
+    case "$1" in
+	ethernet) 
+		killall wpa_supplicant
+		usleep 1
+		;;
+	3g) 
+		if [ -e /dev/ttyACM0 ]; then
+			echo "AT^SDPORT=3" > /dev/ttyACM0
+		fi
+		usleep 1
+		;;
+	gps)
+		if [ -e $gps_port ]; then
+			echo AT^SGPSC="Engine","1" > $gps_port
+		fi
+		usleep 1
+		;;
+	ddr) func_DDR $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+    esac
+fi
+}
+
+#item function
+func_item() {
+if [ $(echo $1 | grep "#" | wc -l) = 0 ]; then
+    case "$1" in
+	testresult) 
+		func_result_check $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+	runintest) 
+		func_POWERONCON $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+	display) 
+		func_DISPLSY $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+	audio) 
+		func_AUDIO $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+	gpio) 
+		func_GPIO $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+	rs232) func_RS232 $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+	rs485) func_RS485 $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+	usb) func_USB $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+	sdcard) func_SDCARD $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+	ethernet) func_ETHERNET $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+	wifi) func_WIFI $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+	3g) func_3G $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+	ddr) #func_DDR $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+	gps) func_GPS $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+	modem) func_A_MODEM $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+	bt) func_BT $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+	zigbee) func_ZIGBEE $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+	internalmac)
+		func_MAC_write $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+	sendftp) 	
+		func_SEND_ftp $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+	writeasix) 	
+		func_Write_Asix $2 #> /dev/null 2>&1
+		sleep 1
+		;;
+		
+	NA)
+		dbout 3 "Nothing!!!"
+		;;
+	*)
+		dbout 2 "item_input error!!!!!!"
+		dbout 3 "please key-in correct item name and arg:"
+		for item in ${item_list}; do
+			dbout 3 "$item"		
+		done
+    esac
+fi
+}
+
+func_type() {
+	type="free"
+	case "$dev_mode" in
+		BISHOP)
+			func_LEDExport "46 47"
+			if [ $(cat /sys/class/gpio/gpio46/value) = 0 ] && [ $(cat /sys/class/gpio/gpio47/value) = 1 ]; then
+				type="TYPE-A-101"
+			fi
+			if [ $(cat /sys/class/gpio/gpio46/value) = 0 ] && [ $(cat /sys/class/gpio/gpio47/value) = 0 ]; then
+				type="TYPE-B-102"
+			fi
+			if [ $(cat /sys/class/gpio/gpio46/value) = 1 ] && [ $(cat /sys/class/gpio/gpio47/value) = 1 ]; then
+				type="TYPE-C-103"
+			fi
+			if [ $(cat /sys/class/gpio/gpio46/value) = 1 ] && [ $(cat /sys/class/gpio/gpio47/value) = 0 ]; then
+				type="TYPE-D-104"
+			fi
+			func_LEDUnexport "46 47"
+			;;
+	esac
+}
+
+#check test finish result
+func_result_check() {
+if [ $1 = "yes" ]; then
+	if [ $(/usr/bin/rtx_setenv -l | grep "Fac_Test = Finish" | wc -l ) = 1 ]; then
+		dbout 3 "This machine has been tested finished"
+		dbout 0 "Do you want to test again? (y/N)"
+		read testagain
+		if [ $testagain = y ]; then
+			echo " "	
+		else
+			exit 0
+		fi
+	fi
+	
+	#====CHECK or SET model=====
+	if [ $(/usr/bin/rtx_setenv -l | grep "R_Num" | wc -l ) = 1 ]; then
+		model=$(/usr/bin/rtx_setenv -l | grep "R_Num" | awk '{print $3}')
+		dbout 5 "run ntpd $ntpdaddr"
+		ntpd -q -n -p $ntpdaddr
+		hwclock -w
+	else
+		func_FacNum
+		func_Ethaddr
+
+		/usr/bin/rtx_setenv --set R_Num=$model
+		sync
+		reboot
+		dbout 1 "system reboot!"
+		sleep 15
+		exit 0
+	fi
+fi
+}
+
+#enter teh device model number
+func_FacNum() {
+	model_ln=0
+	modeltimes=1
+	while [ ! $model_ln = $modellength ] && [ ! $modeltimes = $Mactimes ]; do
+		model_len=$(expr $modellength - 1)
+		read -p "Please input Machine Model(length is $model_len):" model
+
+		if [ "$model" = "exit" ];then
+			exit 0
+		fi
+
+		model_ln=$(echo $model | wc -c)
+
+		if [ ! $model_ln = $modellength ]; then
+			modeltimes=$(expr $modeltimes + 1)
+			if [ $modeltimes = $Mactimes ]; then
+				dbout 2 "Incorrectly three times"
+				model="${model:-NULL}"
+				button=$(ls ./ | grep $model | wc -l)
+				model="$model"-"$button".log
+				dbout 2 "0.a.S/N Format= Fail"
+			else
+				dbout 3 "Format error. Please try again."
+			fi
+		fi
+	done
+	dbout 7 "[$model] is the Machine Model [$type]"
+	model_ln=0
+	modeltimes=1
+}
+
+#scan the device ethernet mac address
+func_Ethaddr() {
+for i in $ethdev
+do
+	ethaddr_ln=0
+	ethtimes=1
+	while [ ! $ethaddr_ln = 18 ] && [ ! $ethtimes = $Mactimes ]; do
+		read -p "Please Enter [$i] Mac_addr(length is 12):" ethaddr
+
+		if [ "$ethaddr" = "exit" ];then
+			exit 0
+		fi
+
+		ethaddr0=${ethaddr:0:2}
+		ethaddr1=${ethaddr:2:2}
+		ethaddr2=${ethaddr:4:2}
+		ethaddr3=${ethaddr:6:2}
+		ethaddr4=${ethaddr:8:2}
+		ethaddr5=${ethaddr:10:2}
+		ethaddr=$ethaddr0:$ethaddr1:$ethaddr2:$ethaddr3:$ethaddr4:$ethaddr5
+
+		ethaddr_ln=$(echo $ethaddr | wc -c)
+
+		if [ ! $ethaddr_ln = 18 ]; then
+			ethtimes=$(expr $ethtimes + 1)
+			if [ $ethtimes = $Mactimes ]; then
+				dbout 2 "Incorrectly three times"
+			else
+				dbout 3 "Format error. Please try again."
+			fi
+		fi
+		
+		if [ $i = "internal" ]; then
+			/usr/bin/rtx_setenv --set ethaddr=$ethaddr
+			/usr/bin/rtx_setenv --set fec_addr=$ethaddr
+		elif [ $i = "asix88772b" ]; then
+			if [ -f $CURDIR/Asixeeprom.bin ]; then
+				asix_list=`cat ${CURDIR}/Asixeeprom.bin | awk '{print $1}'`
+				declare -i i=0
+				for asixmac in ${asix_list}; do
+					i=$i+1
+					if [ $i = 5 ]; then
+						sed -i "5,7s/$asixmac/$ethaddr0$ethaddr1/g" $CURDIR/Asixeeprom.bin
+					elif [ $i = 6 ]; then
+						sed -i "5,7s/$asixmac/$ethaddr2$ethaddr3/g" $CURDIR/Asixeeprom.bin
+					elif [ $i = 7 ]; then
+						sed -i "5,7s/$asixmac/$ethaddr4$ethaddr5/g" $CURDIR/Asixeeprom.bin
+					fi
+				done
+				$CURDIR/ASIXeeprom weeprom $CURDIR/Asixeeprom.bin 256
+			fi
+		fi
+	done
+	ethaddr_ln=0
+	ethtimes=1
+done
+}
+
+#write the asix ethernet mac address
+func_Write_Asix() {
+	ethaddr_ln=0
+	ethaddr="$1"
+
+	ethaddr0=${ethaddr:0:2}
+	ethaddr1=${ethaddr:2:2}
+	ethaddr2=${ethaddr:4:2}
+	ethaddr3=${ethaddr:6:2}
+	ethaddr4=${ethaddr:8:2}
+	ethaddr5=${ethaddr:10:2}
+	ethaddr=$ethaddr0:$ethaddr1:$ethaddr2:$ethaddr3:$ethaddr4:$ethaddr5
+	ethaddr_ln=$(echo $ethaddr | wc -c)
+	
+	if [ ! $ethaddr_ln = 18 ]; then
+		dbout 2 "Format error. Please try again."
+		dbout 3 "example : ./test writeasix 1234567889acf"
+		exit 0
+	fi
+		
+	if [ -f $CURDIR/Asixeeprom.bin ]; then
+			asix_list=`cat ${CURDIR}/Asixeeprom.bin | awk '{print $1}'`
+			i=0
+			for asixmac in ${asix_list}; do
+#數值的處理要注意是用二次小括號(( ...... )) it support +, -, *, /, %
+				i=$(($i+1))
+				if [ $i = 5 ]; then
+					sed -i "5,7s/$asixmac/$ethaddr0$ethaddr1/g" $CURDIR/Asixeeprom.bin
+				elif [ $i = 6 ]; then
+					sed -i "5,7s/$asixmac/$ethaddr2$ethaddr3/g" $CURDIR/Asixeeprom.bin
+				elif [ $i = 7 ]; then
+					sed -i "5,7s/$asixmac/$ethaddr4$ethaddr5/g" $CURDIR/Asixeeprom.bin
+				fi
+			done
+		$CURDIR/ASIXeeprom weeprom $CURDIR/Asixeeprom.bin 256
+	fi
+	ethaddr_ln=0
+}
+
+###########################################
+#    START TEST
+###########################################
+dbout 3 "===========START==========="
+item_sel="${1:-NA}"
+item_arg1="$2"
+
+dbout 5 "======CHECK_func_type======"
+func_type
+
+if [ $item_sel != "NA" ]; then
+	dbout 5 "choise item : $item_sel:$item_arg1"
+	func_item $item_sel $item_arg1
+else
+	for item in ${item_list}; do
+		item_name=`echo $item | awk -F"=" '{print $1}'`
+		item_tmp=`echo $item | awk -F"=" '{print $2}' | tr "," " "`
+		for item_arg in $item_tmp ; do
+			func_item_predo $item_name $item_arg
+		done
+	done
+
+	for item in ${item_list}; do
+		item_name=`echo $item | awk -F"=" '{print $1}'`
+		item_tmp=`echo $item | awk -F"=" '{print $2}' | tr "," " "`
+		for item_arg in $item_tmp ; do
+			dbout 6 "$item_name:$item_arg"	
+			func_item $item_name $item_arg
+		done
+	done
+fi
+
+dbout 3 "**************Test finish****************"	
+exit 2
+
