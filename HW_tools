@@ -3,7 +3,7 @@
 DIR=$0
 CURDIR=${DIR%/*}
 cd $CURDIR
-
+ 
 mp_fun="mp"
 efm_fun="efm32fn"
 . $CURDIR/info_config
